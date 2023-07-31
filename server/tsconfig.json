@@ -1,0 +1,11 @@
+{
+    "include": [
+        "*.ts"
+    ],
+    "compilerOptions": {
+        "noImplicitAny": false,
+        "strict": false,
+        "outDir": "dist",
+        "allowJs": true
+    }
+}
