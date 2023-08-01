@@ -7,7 +7,23 @@ interface ClientInfo {
 }
 
 let wss: Server<typeof WebSocket, typeof IncomingMessage>
-let clients = new WeakMap<WebSocket, ClientInfo>()
+let clients = new Map<WebSocket, ClientInfo>()
+
+function findClient(name: string) {
+    let it = clients.entries()
+    while (true) {
+        let v = it.next()
+        if (v.done) {
+            return
+        }
+        let values: [WebSocket, ClientInfo] = v.value
+        let ws = values[0]
+        let info = values[1]
+        if (info.name == name) {
+            return ws
+        }
+    }
+}
 
 function broadcastInfos() {
     let infos = []
@@ -28,7 +44,7 @@ function broadcastInfos() {
 }
 
 const processors: { [event: string]: (ws: WebSocket, json: any) => void } = {
-    update: (ws, json) => {
+    "update-myinfo": (ws, json) => {
         let info = clients.get(ws)
         if (json.name) {
             info.name = json.name
@@ -38,8 +54,24 @@ const processors: { [event: string]: (ws: WebSocket, json: any) => void } = {
         }
         broadcastInfos()
     },
-    request: (ws, json) => {
+    "request-clients": (ws, json) => {
         broadcastInfos()
+    },
+    "send-message": (ws, json) => {
+        let sender = clients.get(ws)
+        let receiver = findClient(json.to)
+        if (receiver) {
+            receiver.send(JSON.stringify({
+                event: "message",
+                data: {
+                    from: sender.name,
+                    to: json.to,
+                    content: json.content
+                }
+            }))
+        } else {
+            console.warn("can not find receiver", json.to)
+        }
     }
 }
 
@@ -47,6 +79,8 @@ function processMessage(ws: WebSocket, json: any) {
     let p = processors[json.event]
     if (p) {
         p(ws, json.data)
+    } else {
+        console.warn("没有处理器", json.event)
     }
 }
 
@@ -72,7 +106,6 @@ wss.on("connection", (ws, req) => {
         console.log("ws.error", e)
     })
     ws.on("message", (data, isBinary) => {
-        console.log("ws.message", data, isBinary)
         let content: string
         if (data instanceof ArrayBuffer) {
             content = Buffer.from(data).toString()
@@ -90,11 +123,13 @@ wss.on("connection", (ws, req) => {
             console.log(data)
             return
         }
+        console.log("message", json)
         processMessage(ws, json)
     })
     ws.on("close", (code, reason) => {
         console.log("ws.close", code, reason.toString())
         clients.delete(ws)
+        broadcastInfos()
     })
 })
 wss.on("listening", () => {

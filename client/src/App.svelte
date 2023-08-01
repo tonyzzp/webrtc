@@ -1,17 +1,40 @@
 <script lang="ts">
-    import { Buffer } from "buffer";
+    import { signal } from "./lib/signal";
+    import { tools } from "./lib/tools";
+
+    interface Status {
+        signalServer?: boolean;
+        signalingState?: RTCSignalingState;
+        iceGatheringState?: RTCIceGatheringState;
+        iceConnectionState?: RTCIceConnectionState;
+        connectionState?: RTCPeerConnectionState;
+    }
+
+    interface ChatMessage {
+        from: string;
+        content: string;
+    }
 
     let pc: RTCPeerConnection;
     let sendChannel: RTCDataChannel;
     let receiveChannel: RTCDataChannel;
-    let myInviteCode = "";
-    let remoteInviteCode = "";
-    let answerCode = "";
     let candidates: RTCIceCandidate[] = [];
+    let selectedUser = "";
+    let currentUser = "";
+    let users: signal.Info[] = [];
+    let myName = localStorage.getItem("webrtc-demo-myname");
+    let sendContent = "";
+    let status: Status = {};
+    let chatMessages: ChatMessage[] = [];
 
     $: {
-        console.log("remoteInviteCode");
-        console.log(remoteInviteCode);
+        myName = myName.trim();
+        localStorage.setItem("webrtc-demo-myname", myName);
+        signal.updateMyInfo({ name: myName });
+    }
+
+    if (!myName) {
+        myName = tools.randomString(10);
     }
 
     let STUNS = [
@@ -47,105 +70,103 @@
     };
 
     async function onInviteClick() {
+        if (selectedUser == myName) {
+            alert("不能选择自己");
+            return;
+        }
+        init();
         let offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
         let json = pc.localDescription.toJSON();
         console.log(json.type, json.sdp);
-        myInviteCode = JSON.stringify(json);
-        myInviteCode = Buffer.from(myInviteCode).toString("base64");
-    }
-
-    async function onConnectClick() {
-        let str = remoteInviteCode.trim();
-        str = Buffer.from(str, "base64").toString();
-        let json = JSON.parse(str);
-        await pc.setRemoteDescription(new RTCSessionDescription(json));
-        console.log("remote", pc.remoteDescription);
-        // candidates.forEach(async (v) => {
-        //     console.log("addCandicate", v.address);
-        //     await pc.addIceCandidate(v);
-        // });
-        let answer = await pc.createAnswer();
-        console.log("answer", answer);
-        await pc.setLocalDescription(answer);
-        answerCode = JSON.stringify(pc.localDescription.toJSON());
-        answerCode = Buffer.from(answerCode).toString("base64");
-    }
-
-    async function onAcceptClick() {
-        let str = answerCode.trim();
-        str = Buffer.from(str, "base64").toString();
-        let json = JSON.parse(str);
-        await pc.setRemoteDescription(new RTCSessionDescription(json));
-        console.log("pc.remote", pc.remoteDescription);
-
-        // candidates.forEach(async (v) => {
-        //     console.log("addCandicate", v.address);
-        //     await pc.addIceCandidate(v);
-        // });
-    }
-
-    async function onAddCandidateClick() {
-        // candidates.forEach(async (v) => {
-        //     await pc.addIceCandidate(v);
-        // });
-        let str = prompt("candidate");
-        let json = JSON.parse(str);
-        console.log("addCandidate", json);
-        await pc.addIceCandidate(new RTCIceCandidate(json));
-    }
-
-    async function onDumpClick() {
-        console.log("pc.localDescription", pc.localDescription);
-        console.log("pc.currentLocalDescription", pc.currentLocalDescription);
-        console.log("pc.remoteDescription", pc.remoteDescription);
-        console.log("pc.currentRemoteDescription", pc.currentRemoteDescription);
-        console.log("pc.signalingState", pc.signalingState);
-        console.log("pc.connectionState", pc.connectionState);
-        console.log("pc.iceGatheringState", pc.iceGatheringState);
-        console.log("pc.iceConnectionState", pc.iceConnectionState);
-        let stats = await pc.getStats();
-        console.log("stats---");
-        stats.forEach((v) => {
-            console.log(v);
+        signal.sendMessage(selectedUser.trim(), {
+            offer: json,
         });
     }
 
     async function onSendClick() {
-        sendChannel.send(`ruok: ${new Date().toLocaleString()}`);
+        if (sendChannel) {
+            sendChannel.send(sendContent);
+            chatMessages.push({
+                from: myName,
+                content: sendContent,
+            });
+            chatMessages = chatMessages;
+            sendContent = "";
+        }
     }
 
-    async function init() {
+    async function acceptOffer(who: string, offer: RTCSessionDescriptionInit) {
+        init();
+        currentUser = who;
+        await pc.setRemoteDescription(new RTCSessionDescription(offer));
+        let answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        signal.sendMessage(who, {
+            answer: pc.localDescription.toJSON(),
+        });
+    }
+
+    async function acceptAnswer(who: string, answer: RTCSessionDescriptionInit) {
+        currentUser = who;
+        await pc.setRemoteDescription(new RTCSessionDescription(answer));
+    }
+
+    function init() {
+        if (sendChannel) {
+            sendChannel.close();
+            sendChannel = null;
+        }
+        if (receiveChannel) {
+            receiveChannel.close();
+            receiveChannel = null;
+        }
+        if (pc) {
+            pc.close();
+            pc = null;
+        }
         pc = new RTCPeerConnection(rtcConfig);
         pc.onicecandidate = (e) => {
             if (e.candidate) {
                 console.log("localConn.onicecandidate ", e.candidate, e.candidate.address);
                 candidates.push(e.candidate);
                 candidates = [...candidates];
+                if (pc.remoteDescription) {
+                    pc.addIceCandidate(e.candidate);
+                }
+                signal.sendMessage(currentUser, {
+                    candidates: candidates.map((v) => v.toJSON()),
+                });
             }
         };
         pc.onicecandidateerror = (p) => {
             let e = p as RTCPeerConnectionIceErrorEvent;
-            // console.log("localConn.onicecandidateerror", e.url, e.errorText);
+            console.log("localConn.onicecandidateerror", e.url, e.errorText);
         };
         pc.ondatachannel = (e) => {
             console.log("localConn.ondatachannel", e.channel);
             receiveChannel = e.channel;
             receiveChannel.onmessage = (e) => {
                 console.log("receiveChannel.onMessage", e.data);
+                chatMessages.push({
+                    from: currentUser,
+                    content: e.data,
+                });
+                chatMessages = chatMessages;
             };
         };
         pc.onconnectionstatechange = (e) => {
             console.log("onconnectionstatechange", e);
-        };
-        pc.oniceconnectionstatechange = (e) => {
-            console.log("oniceconnectionstatechange", e);
-        };
-        pc.onsignalingstatechange = (e) => {
-            console.log("onsignalingstatechange", e);
+            status.connectionState = pc.connectionState;
         };
         pc.onicegatheringstatechange = (e) => {
-            console.log("onicegatheringstatechange", e);
+            status.iceGatheringState = pc.iceGatheringState;
+        };
+        pc.oniceconnectionstatechange = (e) => {
+            status.iceConnectionState = pc.iceConnectionState;
+        };
+        pc.onsignalingstatechange = (e) => {
+            status.signalingState = pc.signalingState;
         };
 
         sendChannel = pc.createDataChannel("chat");
@@ -158,46 +179,146 @@
         sendChannel.onmessage = (e) => {
             console.log("sendChannel.onmessage", e.data);
         };
+
+        status.signalingState = pc.signalingState;
+        status.iceGatheringState = pc.iceGatheringState;
+        status.iceConnectionState = pc.iceConnectionState;
+        status.connectionState = pc.connectionState;
     }
     init();
+
+    signal.init({ name: myName });
+    signal.addListener({
+        onMessage: (message) => {
+            console.log("message", message);
+            if (message.event == "clients") {
+                users = message.data;
+            } else if (message.event == "message") {
+                let content = message.data.content;
+                if (content.offer) {
+                    console.log("收到offer");
+                    let ok = confirm(`${message.data.from} 要与你连接，是否同意`);
+                    console.log(ok);
+                    if (!ok) {
+                        return;
+                    }
+                    acceptOffer(message.data.from, content.offer);
+                } else if (content.answer) {
+                    console.log("收到answer");
+                    acceptAnswer(message.data.from, content.answer);
+                } else if (content.candidates) {
+                    let candidates: RTCIceCandidate[] = content.candidates.map((v: any) => new RTCIceCandidate(v));
+                    candidates.forEach((v) => {
+                        pc.addIceCandidate(v);
+                    });
+                }
+            }
+        },
+        onStatusChanged: (state) => {
+            console.log("state", state);
+            status.signalServer = state == WebSocket.OPEN;
+            setTimeout(() => {
+                signal.sendMessage(myName, {
+                    time: new Date().toLocaleString(),
+                    what: "ruok",
+                });
+            }, 1000);
+        },
+    });
 </script>
 
 <main>
-    <ul />
+    <h4>状态</h4>
+    <pre>
+myName: {myName}
+currentConnectUser: {currentUser}
+signalServer: {status.signalServer}
+signalingState: {status.signalingState}
+iceGatheringState: {status.iceGatheringState}
+iceConnectionState: {status.iceConnectionState}
+connectionState: {status.connectionState}
+    </pre>
+    <h4>我的昵称</h4>
+    <input type="text" bind:value={myName} />
 
-    <h3>我的邀请码</h3>
-    <textarea class="invite-code" disabled>{myInviteCode}</textarea>
+    <h4>在线用户列表</h4>
+    <ul class="user-list">
+        {#each users as user}
+            <li class="user-list-item">
+                <label><input type="radio" name="user" value={user.name} bind:group={selectedUser} />{user.name}</label>
+            </li>
+        {/each}
+        <p />
+    </ul>
+    <button on:click={onInviteClick} disabled={selectedUser == ""}>发起连接</button>
 
-    <h3>输入邀请码</h3>
-    <textarea bind:value={remoteInviteCode} />
-
-    <h3>我的回应</h3>
-    <textarea bind:value={answerCode} />
-
-    <h3>candidates</h3>
-    <ul>
-        {#each candidates as candidate}
-            <li>{JSON.stringify(candidate.toJSON())}</li>
+    <h4>聊天</h4>
+    <ul class="chat-list">
+        {#each chatMessages as item}
+            <li class="chat-list-item">
+                <code>{item.from}</code>:{item.content}
+            </li>
         {/each}
     </ul>
-    <div>
-        <button on:click={onInviteClick}>生成邀请码</button>
-        <button on:click={onConnectClick}>连接远程</button>
-        <button on:click={onAcceptClick}>接受连接</button>
-        <button on:click={onAddCandidateClick}>添加candidates</button>
-        <button on:click={onDumpClick}>dump</button>
-        <button on:click={onSendClick}>发消息</button>
-    </div>
+    <textarea disabled={currentUser == ""} bind:value={sendContent} />
+    <button disabled={currentUser == ""} on:click={onSendClick}>发送</button>
 </main>
 
-<style>
-    textarea {
+<style scoped>
+    .user-list {
+        text-align: start;
+        list-style: none;
+        padding: 0;
+    }
+    pre {
+        text-align: start;
+    }
+    .user-list-item {
+        list-style: none;
+        width: 400px;
+    }
+    .user-list-item:hover {
+        background-color: gainsboro;
+        border-radius: 5px;
+    }
+    .user-list-item label {
+        font-size: x-large;
+        display: inline-block;
         width: 100%;
-        min-width: 600px;
-        min-height: 150px;
+    }
+    input[type="radio"] {
+        margin: 1em;
+        width: 2em;
+        height: 2em;
+        vertical-align: middle;
+    }
+    input[type="text"] {
+        font-size: x-large;
+        padding: 0.3em;
     }
 
-    ul {
+    textarea {
+        min-width: 400px;
+        min-height: 100px;
+        display: block;
+        margin: 10px 0;
+    }
+
+    .chat-list {
+        list-style: none;
         text-align: start;
+        padding: 0;
+        max-height: 300px;
+        overflow: auto;
+    }
+    .chat-list-item {
+        list-style: none;
+        line-height: 1.5em;
+    }
+    .chat-list-item code {
+        margin: 1em;
+        padding: 0.3em;
+        background-color: gainsboro;
+        border-radius: 0.3em;
     }
 </style>
