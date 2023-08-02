@@ -158,6 +158,9 @@
         pc.onconnectionstatechange = (e) => {
             console.log("onconnectionstatechange", e);
             status.connectionState = pc.connectionState;
+            if (pc.connectionState == "disconnected") {
+                currentUser = "";
+            }
         };
         pc.onicegatheringstatechange = (e) => {
             status.iceGatheringState = pc.iceGatheringState;
@@ -256,7 +259,7 @@ connectionState: {status.connectionState}
     <ul class="chat-list">
         {#each chatMessages as item}
             <li class="chat-list-item">
-                <code>{item.from}</code>:{item.content}
+                <code class:is-me={item.from == myName}>{item.from}</code>:{item.content}
             </li>
         {/each}
     </ul>
@@ -320,5 +323,9 @@ connectionState: {status.connectionState}
         padding: 0.3em;
         background-color: gainsboro;
         border-radius: 0.3em;
+    }
+
+    code.is-me {
+        background-color: darkseagreen;
     }
 </style>

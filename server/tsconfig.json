@@ -1,11 +1,17 @@
 {
+    "compilerOptions": {
+        "target": "es2016",
+        "module": "ESNext",
+        "esModuleInterop": true,
+        "forceConsistentCasingInFileNames": true,
+        "strict": false,
+        "skipLibCheck": true,
+        "outDir": "dist"
+    },
     "include": [
         "*.ts"
     ],
-    "compilerOptions": {
-        "noImplicitAny": false,
-        "strict": false,
-        "outDir": "dist",
-        "allowJs": true
+    "ts-node": {
+        "esm": true
     }
 }

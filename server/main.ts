@@ -1,13 +1,17 @@
-import { IncomingMessage } from "http"
-import { Server, WebSocket, WebSocketServer } from "ws"
+import * as expressns from "express"
+import { Server as HttpServer, IncomingMessage, ServerResponse, createServer } from "http"
+import * as wsns from "ws"
+import path from "path"
 
 interface ClientInfo {
     name?: string,
     candidates?: string[]
 }
 
-let wss: Server<typeof WebSocket, typeof IncomingMessage>
-let clients = new Map<WebSocket, ClientInfo>()
+let wss: wsns.WebSocketServer
+let clients = new Map<wsns.WebSocket, ClientInfo>()
+let express: expressns.Express
+let httpServer: HttpServer<typeof IncomingMessage, typeof ServerResponse>
 
 function findClient(name: string) {
     let it = clients.entries()
@@ -43,7 +47,7 @@ function broadcastInfos() {
     })
 }
 
-const processors: { [event: string]: (ws: WebSocket, json: any) => void } = {
+const processors: { [event: string]: (ws: wsns.WebSocket, json: any) => void } = {
     "update-myinfo": (ws, json) => {
         let info = clients.get(ws)
         if (json.name) {
@@ -75,7 +79,7 @@ const processors: { [event: string]: (ws: WebSocket, json: any) => void } = {
     }
 }
 
-function processMessage(ws: WebSocket, json: any) {
+function processMessage(ws: wsns.WebSocket, json: any) {
     let p = processors[json.event]
     if (p) {
         p(ws, json.data)
@@ -84,60 +88,90 @@ function processMessage(ws: WebSocket, json: any) {
     }
 }
 
-wss = new WebSocketServer({
-    host: "0.0.0.0",
-    port: 80,
-    path: "/ws"
-})
+function initExpress() {
+    console.log("import.meta.url", import.meta.url)
+    let dir = path.dirname(import.meta.url)
+    if (dir.startsWith("file:///")) {
+        dir = dir.substring(8)
+    }
+    console.log(dir)
+    express = expressns.default()
+    express.use(expressns.static(dir, { index: "index.html" }))
+}
 
-wss.on("connection", (ws, req) => {
-    console.log("connection",
-        "local", [req.socket.localFamily, req.socket.localAddress, req.socket.localPort],
-        "remote", [req.socket.remoteFamily, req.socket.remoteAddress, req.socket.remotePort]
-    )
-    clients.set(ws, {})
-    ws.on("open", () => {
-        console.log("ws.open")
+function initHttpServer() {
+    httpServer = createServer(express)
+}
+
+function initWss() {
+    wss = new wsns.WebSocketServer({
+        server: httpServer
     })
-    ws.on("upgrade", req => {
-        console.log("upgrade", req.url)
+
+    wss.on("connection", (ws, req) => {
+        console.log("connection",
+            "local", [req.socket.localFamily, req.socket.localAddress, req.socket.localPort],
+            "remote", [req.socket.remoteFamily, req.socket.remoteAddress, req.socket.remotePort]
+        )
+        clients.set(ws, {})
+        ws.on("open", () => {
+            console.log("ws.open")
+        })
+        ws.on("upgrade", req => {
+            console.log("upgrade", req.url)
+        })
+        ws.on("error", e => {
+            console.log("ws.error", e)
+        })
+        ws.on("message", (data, isBinary) => {
+            let content: string
+            if (data instanceof ArrayBuffer) {
+                content = Buffer.from(data).toString()
+            } else if (data instanceof Buffer) {
+                content = data.toString()
+            } else {
+                content = data.map(buffer => buffer.toString()).join("")
+            }
+            let json: any = null
+            try {
+                json = JSON.parse(content)
+            } catch (e) {
+                console.warn(e)
+                console.log(content)
+                console.log(data)
+                return
+            }
+            console.log("message", json)
+            processMessage(ws, json)
+        })
+        ws.on("close", (code, reason) => {
+            console.log("ws.close", code, reason.toString())
+            clients.delete(ws)
+            broadcastInfos()
+        })
     })
-    ws.on("error", e => {
-        console.log("ws.error", e)
+    wss.on("listening", () => {
+        console.log("listening")
     })
-    ws.on("message", (data, isBinary) => {
-        let content: string
-        if (data instanceof ArrayBuffer) {
-            content = Buffer.from(data).toString()
-        } else if (data instanceof Buffer) {
-            content = data.toString()
-        } else {
-            content = data.map(buffer => buffer.toString()).join("")
-        }
-        let json: any = null
-        try {
-            json = JSON.parse(content)
-        } catch (e) {
-            console.warn(e)
-            console.log(content)
-            console.log(data)
-            return
-        }
-        console.log("message", json)
-        processMessage(ws, json)
+    wss.on("error", (e) => {
+        console.log("error", e)
     })
-    ws.on("close", (code, reason) => {
-        console.log("ws.close", code, reason.toString())
-        clients.delete(ws)
-        broadcastInfos()
+    wss.on("close", () => {
+        console.log("close")
     })
-})
-wss.on("listening", () => {
-    console.log("listening")
-})
-wss.on("error", (e) => {
-    console.log("error", e)
-})
-wss.on("close", () => {
-    console.log("close")
-})
+}
+
+function startHttpServer() {
+    httpServer.listen(port, "0.0.0.0", 10, () => {
+        console.log("http server start listen", httpServer.address())
+    })
+}
+
+// --------------------- begin
+
+const port = parseInt(process.env.HTTP_PORT) || 80
+
+initExpress()
+initHttpServer()
+initWss()
+startHttpServer()

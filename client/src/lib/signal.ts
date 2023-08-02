@@ -1,5 +1,4 @@
 import { Buffer } from "buffer"
-import { env } from "../env"
 
 let ws: WebSocket
 let listeners: signal.Listener[] = []
@@ -22,10 +21,7 @@ export namespace signal {
             return
         }
         myInfo = info
-        let url = env.signalServer
-        if (!url) {
-            url = `ws://${location.host}:${location.port || "80"}/ws`
-        }
+        let url = import.meta.env.PROD ? `ws://${location.host}:${location.port || "80"}/ws` : "ws://localhost:80/ws"
         console.log("signalServer", url)
         ws = new WebSocket(url)
         ws.onclose = () => {

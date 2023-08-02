@@ -4,16 +4,27 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start":"ts-node main.ts"
+    "dev": "ts-node main.ts",
+    "build": "rollup -c"
   },
   "author": "",
+  "type": "module",
   "license": "ISC",
   "devDependencies": {
+    "@rollup/plugin-commonjs": "^25.0.3",
+    "@rollup/plugin-json": "^6.0.0",
+    "@rollup/plugin-node-resolve": "^15.1.0",
+    "@rollup/plugin-typescript": "^11.1.2",
+    "@types/express": "^4.17.17",
+    "@types/node": "^20.4.5",
     "@types/ws": "^8.5.5",
+    "rollup": "^3.27.0",
     "ts-node": "^10.9.1",
+    "tslib": "^2.6.1",
     "typescript": "^5.1.6"
   },
   "dependencies": {
+    "express": "^4.18.2",
     "ws": "^8.13.0"
   }
 }
