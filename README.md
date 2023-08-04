@@ -2,6 +2,8 @@
 
 通过webrtc  datachannel进行聊天的示例
 
+Demo: https://webrtc.veikr.com
+
 ## 项目结构
 
 - `client`: 使用svelte写的网页客户端
