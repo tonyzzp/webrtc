@@ -4,6 +4,8 @@
 
 Demo: http://webrtc.veikr.com
 
+![](./imgs/1.png)
+
 ## 项目结构
 
 - `client`: 使用svelte写的网页客户端
