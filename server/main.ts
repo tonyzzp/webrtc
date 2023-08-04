@@ -91,8 +91,8 @@ function processMessage(ws: wsns.WebSocket, json: any) {
 function initExpress() {
     console.log("import.meta.url", import.meta.url)
     let dir = path.dirname(import.meta.url)
-    if (dir.startsWith("file:///")) {
-        dir = dir.substring(8)
+    if (dir.startsWith("file://")) {
+        dir = dir.substring(7)
     }
     console.log(dir)
     express = expressns.default()
