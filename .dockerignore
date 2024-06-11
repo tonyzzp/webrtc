@@ -4,5 +4,7 @@
 /server/node_modules
 /server/dist
 
+/imgs
+
 /dist
 /build.bat

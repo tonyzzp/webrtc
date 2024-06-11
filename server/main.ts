@@ -93,6 +93,9 @@ function initExpress() {
     let dir = path.dirname(import.meta.url)
     if (dir.startsWith("file://")) {
         dir = dir.substring(7)
+        if (/^\/[a-zA-Z]\:\//.test(dir)) {
+            dir = dir.substring(1)
+        }
     }
     console.log(dir)
     express = expressns.default()

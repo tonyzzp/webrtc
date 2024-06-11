@@ -1,11 +1,11 @@
 @echo off
 echo ----- build server
-call pnpm -C server i
-call pnpm -C server run build
+call npm -C server i
+call npm -C server run build
 
 echo ----- build client
-call pnpm -C client i
-call pnpm -C client run build
+call npm -C client i
+call npm -C client run build
 
 echo ----- copy files to /dist
 rd /s /q dist

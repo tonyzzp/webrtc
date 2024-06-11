@@ -8,7 +8,7 @@ import rollupJson from "@rollup/plugin-json"
 export default defineConfig({
     input: "main.ts",
     output: {
-        file: "dist/main.mjs",
+        file: "dist/webrtc.server.mjs",
         format: "es"
     },
     plugins: [
