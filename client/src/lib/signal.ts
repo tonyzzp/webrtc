@@ -22,7 +22,7 @@ export namespace signal {
         }
         myInfo = info
         let protocol = location.protocol == "https:" ? "wss" : "ws"
-        let url = import.meta.env.PROD ? `${protocol}://${location.hostname}/ws` : "ws://localhost:80/ws"
+        let url = import.meta.env.PROD ? `${protocol}://${location.hostname}:${location.port || 80}/ws` : "ws://localhost:80/ws"
         console.log("signalServer", url)
         ws = new WebSocket(url)
         ws.onclose = () => {
