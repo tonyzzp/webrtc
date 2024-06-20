@@ -22,5 +22,5 @@ client/server分别编译，然后复制到根目录的dist目录下。
 ## 使用docker
 
 ```
-docker run -itd --name webrtc -p 80:80 ghcr.io/tonyzzp/webrtc-demo
+docker run -itd --name webrtc -p 80:80 ghcr.io/tonyzzp/webrtc
 ```
