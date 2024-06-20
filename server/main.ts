@@ -1,7 +1,7 @@
 import * as expressns from "express"
 import { Server as HttpServer, IncomingMessage, ServerResponse, createServer } from "http"
-import * as wsns from "ws"
 import path from "path"
+import * as wsns from "ws"
 
 interface ClientInfo {
     name?: string,
@@ -58,6 +58,9 @@ const processors: { [event: string]: (ws: wsns.WebSocket, json: any) => void } =
         }
         broadcastInfos()
     },
+    "hb": (ws, json) => {
+        ws.send(JSON.stringify({ event: "hb" }))
+    },
     "request-clients": (ws, json) => {
         broadcastInfos()
     },
@@ -104,11 +107,13 @@ function initExpress() {
 
 function initHttpServer() {
     httpServer = createServer(express)
+    httpServer.setTimeout(0)
+    httpServer.keepAliveTimeout = 0
 }
 
 function initWss() {
     wss = new wsns.WebSocketServer({
-        server: httpServer
+        server: httpServer,
     })
 
     wss.on("connection", (ws, req) => {

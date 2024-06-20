@@ -3,6 +3,7 @@ import { Buffer } from "buffer"
 let ws: WebSocket
 let listeners: signal.Listener[] = []
 let myInfo: signal.Info
+let hbFun: any
 
 export namespace signal {
 
@@ -26,6 +27,7 @@ export namespace signal {
         console.log("signalServer", url)
         ws = new WebSocket(url)
         ws.onclose = () => {
+            stopHeartbeat()
             let state = ws.readyState
             ws = null
             listeners.forEach(l => {
@@ -33,6 +35,7 @@ export namespace signal {
             })
         }
         ws.onopen = () => {
+            startHeartbeat()
             listeners.forEach(l => {
                 l.onStatusChanged(ws.readyState)
             })
@@ -45,6 +48,24 @@ export namespace signal {
             listeners.forEach(l => {
                 l.onMessage(json)
             })
+        }
+    }
+
+    function startHeartbeat() {
+        if (hbFun) {
+            clearInterval(hbFun)
+        }
+        hbFun = setInterval(() => {
+            if (ws?.readyState == WebSocket.OPEN) {
+                ws.send(JSON.stringify({ event: "hb" }))
+            }
+        }, 5000)
+    }
+
+    function stopHeartbeat() {
+        if (hbFun) {
+            clearInterval(hbFun)
+            hbFun = null
         }
     }
 
