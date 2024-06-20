@@ -26,9 +26,10 @@ export namespace signal {
         console.log("signalServer", url)
         ws = new WebSocket(url)
         ws.onclose = () => {
+            let state = ws.readyState
             ws = null
             listeners.forEach(l => {
-                l.onStatusChanged(ws.readyState)
+                l.onStatusChanged(state)
             })
         }
         ws.onopen = () => {
